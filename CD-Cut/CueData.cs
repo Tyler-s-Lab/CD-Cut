@@ -1,14 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CD_Cut {
-	public struct OffsetData() {
-		public int Index = 0;
-		public TimeSpan Time = new();
-	}
+﻿namespace CD_Cut {
 
 	public struct Metadata() {
 		public string? Title = null;
@@ -29,6 +19,7 @@ namespace CD_Cut {
 		public int index = -1;
 		public Metadata metadata;
 		public string filepath = "";
-		public List<OffsetData> offsets = [];
+		public double? offset00 = null;
+		public double? offset01 = null;
 	}
 }

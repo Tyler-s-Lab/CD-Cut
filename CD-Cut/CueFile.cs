@@ -6,7 +6,10 @@ namespace CD_Cut {
 
 		Metadata metadata;
 
-		List<Track> tracks = [];
+		readonly List<Track> tracks = [];
+		public List<Track> Tracks {
+			get { return tracks; }
+		}
 
 		public CueFile() { }
 
@@ -23,6 +26,14 @@ namespace CD_Cut {
 					break;
 				var cmds = CommandLineToArgs(line);
 				ParseLine(cmds, ref cur_file, ref cur_metadata);
+			}
+
+			if (tracks.Count > 0) {
+				var tmp = tracks[^1];
+				tmp.metadata = cur_metadata;
+				tracks[^1] = tmp;
+				cur_metadata = metadata;
+				cur_metadata.Album = cur_metadata.Title;
 			}
 
 			_loaded = true;
@@ -45,35 +56,35 @@ namespace CD_Cut {
 			case "REM":
 				switch (_2nd?.ToUpper()) {
 				case "DATE":
-					cur_metadata.Year ??= _3rd;
+					cur_metadata.Year = _3rd;
 					break;
 				case "DISCID":
-					cur_metadata.DiscID ??= _3rd;
+					cur_metadata.DiscID = _3rd;
 					break;
 				case "COMPOSER":
-					cur_metadata.Composer ??= _3rd;
+					cur_metadata.Composer = _3rd;
 					break;
 				case "GENRE":
-					cur_metadata.Genre ??= _3rd;
+					cur_metadata.Genre = _3rd;
 					break;
 				case "COMMENT":
-					cur_metadata.Comment ??= _3rd;
+					cur_metadata.Comment = _3rd;
 					break;
 				default:
 					break;
 				}
 				break;
 			case "CATALOG":
-				cur_metadata.Catalog ??= _2nd;
+				cur_metadata.Catalog = _2nd;
 				break;
 			case "PERFORMER":
-				cur_metadata.Performer ??= _2nd;
+				cur_metadata.Performer = _2nd;
 				break;
 			case "TITLE":
-				cur_metadata.Title ??= _2nd;
+				cur_metadata.Title = _2nd;
 				break;
 			case "ISRC":
-				cur_metadata.ISRC ??= _2nd;
+				cur_metadata.ISRC = _2nd;
 				break;
 			case "FILE":
 				metadata = cur_metadata;
@@ -102,12 +113,18 @@ namespace CD_Cut {
 				break;
 			case "INDEX":
 				if (tracks.Count > 0 && _3rd is not null) {
-					var tmp = tracks[^1];
-					tmp.offsets.Add(new OffsetData() {
-						Index = int.TryParse(_2nd, out var res2) ? res2 : -1,
-						Time = ParseTimeSpan(_3rd),
-					});
-					tracks[^1] = tmp;
+					if (int.TryParse(_2nd, out var index)) {
+						var tmp = tracks[^1];
+						switch (index) {
+						case 0:
+							tmp.offset00 = ParseTimeSpan(_3rd);
+							break;
+						case 1:
+							tmp.offset01 = ParseTimeSpan(_3rd);
+							break;
+						}
+						tracks[^1] = tmp;
+					}
 				}
 				break;
 			default:
@@ -115,17 +132,11 @@ namespace CD_Cut {
 			}
 		}
 
-		static TimeSpan ParseTimeSpan(string str) {
+		static double ParseTimeSpan(string str) {
 			var nums = str.Split(':');
-			if (nums.Length != 3) {
+			if (nums.Length != 3)
 				throw new ArgumentException($"Time component count: {nums.Length}: {nums}");
-			}
-			int milliScale = nums[2].Length switch {
-				1 => 100,
-				2 => 10,
-				_ => 1
-			};
-			return new TimeSpan(0, 0, int.Parse(nums[0]), int.Parse(nums[1]), int.Parse(nums[2]) * milliScale);
+			return (int.Parse(nums[0]) * 60.0 + int.Parse(nums[1]) + int.Parse(nums[2]) / 75.0) * 1000.0;
 		}
 
 		static IEnumerable<string> CommandLineToArgs(string commandLine) {
@@ -146,7 +157,7 @@ namespace CD_Cut {
 		}
 
 		[LibraryImport("shell32.dll", SetLastError = true)]
-		static partial IntPtr CommandLineToArgvW([MarshalAs(UnmanagedType.LPWStr)] string lpCmdLine, out int pNumArgs);
+		private static partial IntPtr CommandLineToArgvW([MarshalAs(UnmanagedType.LPWStr)] string lpCmdLine, out int pNumArgs);
 
 	}
 }
