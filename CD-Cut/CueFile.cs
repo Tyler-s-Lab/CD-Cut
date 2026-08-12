@@ -1,4 +1,5 @@
 ﻿using System.Runtime.InteropServices;
+using UtfUnknown;
 
 namespace CD_Cut {
 	public partial class CueFile {
@@ -14,8 +15,18 @@ namespace CD_Cut {
 		public CueFile() { }
 
 		public void ReadFromFile(string filepath) {
-			using FileStream fileStream = new(filepath, FileMode.Open, FileAccess.Read, FileShare.Read);
-			using StreamReader reader = new(fileStream, true);
+			using var memoryStream = new MemoryStream();
+			using (var fileStream = File.OpenRead(filepath)) {
+				fileStream.CopyTo(memoryStream);
+				fileStream.Close();
+			}
+			memoryStream.Position = 0;
+			var encoding = CharsetDetector.DetectFromStream(memoryStream).Detected?.Encoding;
+			memoryStream.Position = 0;
+
+			using var reader = encoding is null ?
+				new StreamReader(memoryStream, true) :
+				new StreamReader(memoryStream, encoding);
 
 			string? cur_file = null;
 			Metadata cur_metadata = new();
