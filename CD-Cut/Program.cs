@@ -8,7 +8,7 @@ namespace CD_Cut {
 
 			string? cuePath = null;
 			if (args.Length == 0) {
-				Console.WriteLine("输入 .cue 文件路径。");
+				Console.WriteLine("Path to the .cue file:");
 				var s = Console.ReadLine();
 				if (s != null) {
 					cuePath = s;
@@ -18,13 +18,15 @@ namespace CD_Cut {
 				cuePath = args[0];
 			}
 			if (cuePath == null) {
-				Console.WriteLine("拖入 CD 的 .cue 文件即可。");
+				Console.WriteLine("You can also drag the .cue file into this app.");
+				Console.WriteLine("Press any key to continue . . .");
+				Console.ReadKey();
 				return;
 			}
 			cuePath = cuePath.Trim('"');
 			ProcessOnCue(cuePath);
 
-			Console.WriteLine("请按任意键继续。");
+			Console.WriteLine("Press any key to continue . . .");
 			Console.ReadKey();
 		}
 
@@ -35,6 +37,8 @@ namespace CD_Cut {
 			string dir = Path.GetDirectoryName(cuePath) ?? "";
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
+
+			string cur_source = "";
 
 			for (int i = 0, n = cue.Tracks.Count; i < n; ++i) {
 				Track t = cue.Tracks[i];
@@ -54,7 +58,13 @@ namespace CD_Cut {
 						to = TimeSpan.FromMilliseconds(end2);
 
 				t.filepath = source;
-				Console.WriteLine($"{t.index}: {t.offset01} ({t.filepath})");
+
+				if (t.filepath != cur_source) {
+					Console.WriteLine($"From file: {t.filepath} .");
+					cur_source = t.filepath;
+				}
+				Console.WriteLine($"{t.index}: {t.metadata.Title} ({ss.Hours}:{ss.Minutes}:{ss.Seconds}.{ss.Milliseconds} - {ss.Hours}:{ss.Minutes}:{ss.Seconds}.{ss.Milliseconds})");
+
 				Cut(t, ss, to);
 			}
 		}

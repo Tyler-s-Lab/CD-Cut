@@ -3,7 +3,6 @@ using UtfUnknown;
 
 namespace CD_Cut {
 	public partial class CueFile {
-		bool _loaded = false;
 
 		Metadata metadata;
 
@@ -46,8 +45,6 @@ namespace CD_Cut {
 				cur_metadata = metadata;
 				cur_metadata.Album = cur_metadata.Title;
 			}
-
-			_loaded = true;
 		}
 
 		void ParseLine(IEnumerable<string> cmds, ref string? cur_file, ref Metadata cur_metadata) {
