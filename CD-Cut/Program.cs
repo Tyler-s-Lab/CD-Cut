@@ -39,17 +39,8 @@ namespace CD_Cut {
 			for (int i = 0, n = cue.Tracks.Count; i < n; ++i) {
 				Track t = cue.Tracks[i];
 
-				string source = Path.Combine(dir, t.filepath);
-				if (!File.Exists(source)) {
-					source = Path.Combine(dir, Path.GetFileNameWithoutExtension(cuePath) + ".flac");
-				}
-				if (!File.Exists(source)) {
-					source = Path.Combine(dir, Path.GetFileNameWithoutExtension(cuePath) + ".wav");
-				}
-				if (!File.Exists(source)) {
-					source = Path.Combine(dir, Path.GetFileNameWithoutExtension(cuePath) + ".mp3");
-				}
-				if (!File.Exists(source)) {
+				var source = CheckAudioFile(dir, t.filepath, Path.GetFileNameWithoutExtension(cuePath));
+				if (string.IsNullOrEmpty(source) || !File.Exists(source)) {
 					continue;
 				}
 
@@ -91,18 +82,26 @@ namespace CD_Cut {
 
 			if (!string.IsNullOrEmpty(t.metadata.Title))
 				arglist.AddRange(["-metadata", $"TITLE={t.metadata.Title}"]);
-			if (!string.IsNullOrEmpty(t.metadata.Performer))
-				arglist.AddRange(["-metadata", $"AUTHOR={t.metadata.Performer}"]);
+			if (!string.IsNullOrEmpty(t.metadata.Album))
+				arglist.AddRange(["-metadata", $"ALBUM={t.metadata.Album}"]);
+			if (!string.IsNullOrEmpty(t.metadata.Songwriter))
+				arglist.AddRange(["-metadata", $"ARTIST={t.metadata.Songwriter}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Performer))
 				arglist.AddRange(["-metadata", $"ALBUM_ARTIST={t.metadata.Performer}"]);
-			if (!string.IsNullOrEmpty(t.metadata.Title))
-				arglist.AddRange(["-metadata", $"ALBUM={t.metadata.Album}"]);
-			if (!string.IsNullOrEmpty(t.metadata.Composer))
-				arglist.AddRange(["-metadata", $"COMPOSER={t.metadata.Composer}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Year))
 				arglist.AddRange(["-metadata", $"YEAR={t.metadata.Year}"]);
+			if (!string.IsNullOrEmpty(t.metadata.DiscID))
+				arglist.AddRange(["-metadata", $"DISCID={t.metadata.DiscID}"]);
+			if (!string.IsNullOrEmpty(t.metadata.Composer))
+				arglist.AddRange(["-metadata", $"COMPOSER={t.metadata.Composer}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Genre))
 				arglist.AddRange(["-metadata", $"GENRE={t.metadata.Genre}"]);
+			if (!string.IsNullOrEmpty(t.metadata.Comment))
+				arglist.AddRange(["-metadata", $"COMMENT={t.metadata.Comment}"]);
+			if (!string.IsNullOrEmpty(t.metadata.Catalog))
+				arglist.AddRange(["-metadata", $"CATALOG={t.metadata.Catalog}"]);
+			if (!string.IsNullOrEmpty(t.metadata.ISRC))
+				arglist.AddRange(["-metadata", $"ISRC={t.metadata.ISRC}"]);
 
 			arglist.AddRange([
 				"-c:a", "flac",
@@ -113,6 +112,52 @@ namespace CD_Cut {
 
 			using var process = Process.Start(processStartInfo);
 			process?.WaitForExit();
+		}
+
+		private static string? CheckAudioFile(string dir, string filepath, string cuename) {
+			string res;
+
+			res = Path.Combine(dir, filepath);
+			if (File.Exists(res))
+				return res;
+
+			filepath = Path.GetFileNameWithoutExtension(filepath);
+
+			res = Path.Combine(dir, filepath + ".flac");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".wav");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".ape");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".mp3");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".aiff");
+			if (File.Exists(res))
+				return res;
+
+			filepath = cuename;
+
+			res = Path.Combine(dir, filepath + ".flac");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".wav");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".ape");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".mp3");
+			if (File.Exists(res))
+				return res;
+			res = Path.Combine(dir, filepath + ".aiff");
+			if (File.Exists(res))
+				return res;
+
+			return null;
 		}
 
 		private static string CleanNameForPath(string name) {

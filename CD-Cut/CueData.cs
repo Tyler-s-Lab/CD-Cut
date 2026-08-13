@@ -4,6 +4,7 @@
 		public string? Title = null;
 		public string? Album = null;
 		public string? Performer = null;
+		public string? Songwriter = null;
 
 		public string? Year = null;
 		public string? DiscID = null;

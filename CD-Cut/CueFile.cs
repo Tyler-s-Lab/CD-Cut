@@ -91,6 +91,9 @@ namespace CD_Cut {
 			case "PERFORMER":
 				cur_metadata.Performer = _2nd;
 				break;
+			case "SONGWRITER":
+				cur_metadata.Songwriter = _2nd;
+				break;
 			case "TITLE":
 				cur_metadata.Title = _2nd;
 				break;
