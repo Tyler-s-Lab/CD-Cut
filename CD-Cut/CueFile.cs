@@ -1,14 +1,20 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using UtfUnknown;
 
 namespace CD_Cut {
 	public partial class CueFile {
 
-		Metadata metadata;
+		Metadata albumMetadata;
+		bool albumCaptured;
+		int pendingTrackIndex = -1;
 
 		readonly List<Track> tracks = [];
 		public List<Track> Tracks {
 			get { return tracks; }
+		}
+
+		public Metadata AlbumMetadata {
+			get { return albumMetadata; }
 		}
 
 		public CueFile() { }
@@ -38,13 +44,16 @@ namespace CD_Cut {
 				ParseLine(cmds, ref cur_file, ref cur_metadata);
 			}
 
-			if (tracks.Count > 0) {
-				var tmp = tracks[^1];
-				tmp.metadata = cur_metadata;
-				tracks[^1] = tmp;
-				cur_metadata = metadata;
-				cur_metadata.Album = cur_metadata.Title;
-			}
+			CommitPendingTrack(cur_metadata);
+		}
+
+		void CommitPendingTrack(Metadata value) {
+			if (pendingTrackIndex < 0)
+				return;
+			var track = tracks[pendingTrackIndex];
+			track.metadata = value;
+			tracks[pendingTrackIndex] = track;
+			pendingTrackIndex = -1;
 		}
 
 		void ParseLine(IEnumerable<string> cmds, ref string? cur_file, ref Metadata cur_metadata) {
@@ -98,29 +107,31 @@ namespace CD_Cut {
 				cur_metadata.ISRC = _2nd;
 				break;
 			case "FILE":
-				metadata = cur_metadata;
 				cur_file = _2nd;
 				break;
 			case "TRACK":
-				if (tracks.Count > 0) {
-					var tmp = tracks[^1];
-					tmp.metadata = cur_metadata;
-					tracks[^1] = tmp;
-					cur_metadata = metadata;
-					cur_metadata.Album = cur_metadata.Title;
-				}
-				else {
-					metadata = cur_metadata;
-					cur_metadata.Album = cur_metadata.Title;
-				}
 				if (cur_file is null)
 					break;
+
+				// Album metadata is everything before the first TRACK line, once.
+				// FILE must not overwrite it: in a multi-FILE cue the second FILE
+				// line appears after the previous track's metadata.
+				if (!albumCaptured) {
+					albumMetadata = cur_metadata;
+					albumCaptured = true;
+				}
+				CommitPendingTrack(cur_metadata);
+
+				cur_metadata = albumMetadata;
+				cur_metadata.Album = albumMetadata.Title;
+
 				if (_3rd?.Equals("AUDIO", StringComparison.OrdinalIgnoreCase) != true)
 					break;
 				tracks.Add(new Track() {
 					index = int.TryParse(_2nd, out var res1) ? res1 : -1,
 					filepath = cur_file
 				});
+				pendingTrackIndex = tracks.Count - 1;
 				break;
 			case "INDEX":
 				if (tracks.Count > 0 && _3rd is not null) {
