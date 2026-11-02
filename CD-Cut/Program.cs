@@ -60,13 +60,27 @@ namespace CD_Cut {
 				}
 
 				TimeSpan ss = TimeSpan.Zero, to = TimeSpan.MaxValue;
-				if (t.offset01 is double start)
+				double startMs = 0;
+				if (t.offset01 is double start) {
+					startMs = start;
 					ss = TimeSpan.FromMilliseconds(start);
-				if (i + 1 < n)
-					if (cue.Tracks[i + 1].offset00 is double end)
+				}
+
+				// INDEX times restart at zero for every FILE block, so the next
+				// track only delimits this one when both belong to the same file.
+				if (i + 1 < n &&
+					string.Equals(cue.Tracks[i].filepath, cue.Tracks[i + 1].filepath, StringComparison.OrdinalIgnoreCase)) {
+					Track next = cue.Tracks[i + 1];
+					double? endMs = next.offset00 ?? next.offset01;
+					if (endMs is double end) {
+						if (end <= startMs) {
+							Console.Error.WriteLine(
+								$"Track {t.index}: end {FormatTime(TimeSpan.FromMilliseconds(end))} is not after start {FormatTime(ss)}; skipping.");
+							continue;
+						}
 						to = TimeSpan.FromMilliseconds(end);
-					else if (cue.Tracks[i + 1].offset01 is double end2)
-						to = TimeSpan.FromMilliseconds(end2);
+					}
+				}
 
 				t.filepath = source;
 
