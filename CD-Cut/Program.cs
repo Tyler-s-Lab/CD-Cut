@@ -78,16 +78,21 @@ namespace CD_Cut {
 			string targetPath = filename;
 
 			List<string> arglist = [];
+			// -ss and -to must both be input options: -to is measured against the input
+			// timeline, while an output -to would be relative to the seek point. Seeking
+			// before -i also avoids decoding the whole image for every track.
 			arglist.AddRange([
 				"-loglevel", "warning",
 				"-y",
-				"-i", t.filepath,
 				"-ss", FormatTime(ss)
 			]);
 			if (to < TimeSpan.MaxValue)
 				arglist.AddRange([
 					"-to", FormatTime(to)
 				]);
+			arglist.AddRange([
+				"-i", t.filepath
+			]);
 			arglist.AddRange([
 				"-metadata", $"TRACK={t.index}"
 			]);
