@@ -91,17 +91,21 @@ namespace CD_Cut {
 				string endText = to < TimeSpan.MaxValue ? FormatTime(to) : "end of file";
 				Console.WriteLine($"{t.index}: {t.metadata.Title} ({FormatTime(ss)} - {endText})");
 
-				Cut(t, ss, to, cue.AlbumMetadata, n);
+				Cut(t, ss, to, cue.AlbumMetadata, n, dir);
 			}
 
 			return 0;
 		}
 
-		public static void Cut(Track t, TimeSpan ss, TimeSpan to, Metadata album, int totalTracks) {
-			string filename;
-			filename = $"{t.index}-{t.metadata.Title}.flac";
-			filename = CleanNameForPath(filename);
-			string targetPath = filename;
+		public static void Cut(Track t, TimeSpan ss, TimeSpan to, Metadata album, int totalTracks, string outputDir) {
+			string title = CleanNameForPath(t.metadata.Title ?? "").Trim().TrimEnd('.');
+			if (title.Length == 0)
+				title = "untitled";
+			if (title.Length > 120)
+				title = title[..120].TrimEnd().TrimEnd('.');
+
+			string filename = string.Create(CultureInfo.InvariantCulture, $"{t.index:D2} {title}.flac");
+			string targetPath = Path.Combine(outputDir, filename);
 
 			List<string> arglist = [];
 			// -ss and -to must both be input options: -to is measured against the input
