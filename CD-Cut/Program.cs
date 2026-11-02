@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -45,17 +46,40 @@ namespace CD_Cut {
 			CueFile cue = new();
 			cue.ReadFromFile(cuePath);
 
+			if (cue.Tracks.Count == 0) {
+				Console.Error.WriteLine($"No audio tracks found in {cuePath}.");
+				return 1;
+			}
+
+			string? ffmpeg = FindFfmpeg();
+			if (ffmpeg is null) {
+				Console.Error.WriteLine("ffmpeg.exe was not found in PATH or next to this program.");
+				return 1;
+			}
+
 			string dir = Path.GetDirectoryName(cuePath) ?? "";
 			if (!Directory.Exists(dir))
 				Directory.CreateDirectory(dir);
 
+			// Falling back to an audio file named after the cue only makes sense
+			// for a single-file image; with several FILE blocks it would silently
+			// substitute the whole disc for a missing track file.
+			bool allowCueNameFallback = cue.Tracks
+				.Select(track => track.filepath)
+				.Distinct(StringComparer.OrdinalIgnoreCase)
+				.Count() == 1;
+
+			string cueName = Path.GetFileNameWithoutExtension(cuePath);
 			string cur_source = "";
+			int failures = 0;
 
 			for (int i = 0, n = cue.Tracks.Count; i < n; ++i) {
 				Track t = cue.Tracks[i];
 
-				var source = CheckAudioFile(dir, t.filepath, Path.GetFileNameWithoutExtension(cuePath));
-				if (string.IsNullOrEmpty(source) || !File.Exists(source)) {
+				string? source = CheckAudioFile(dir, t.filepath, cueName, allowCueNameFallback);
+				if (string.IsNullOrEmpty(source)) {
+					Console.Error.WriteLine($"Track {t.index}: audio file '{t.filepath}' was not found; skipping.");
+					++failures;
 					continue;
 				}
 
@@ -76,6 +100,7 @@ namespace CD_Cut {
 						if (end <= startMs) {
 							Console.Error.WriteLine(
 								$"Track {t.index}: end {FormatTime(TimeSpan.FromMilliseconds(end))} is not after start {FormatTime(ss)}; skipping.");
+							++failures;
 							continue;
 						}
 						to = TimeSpan.FromMilliseconds(end);
@@ -91,13 +116,15 @@ namespace CD_Cut {
 				string endText = to < TimeSpan.MaxValue ? FormatTime(to) : "end of file";
 				Console.WriteLine($"{t.index}: {t.metadata.Title} ({FormatTime(ss)} - {endText})");
 
-				Cut(t, ss, to, cue.AlbumMetadata, n, dir);
+				if (!Cut(t, ss, to, cue.AlbumMetadata, n, dir, ffmpeg))
+					++failures;
 			}
 
-			return 0;
+			Console.WriteLine($"{cue.Tracks.Count - failures} of {cue.Tracks.Count} track(s) written.");
+			return failures;
 		}
 
-		public static void Cut(Track t, TimeSpan ss, TimeSpan to, Metadata album, int totalTracks, string outputDir) {
+		public static bool Cut(Track t, TimeSpan ss, TimeSpan to, Metadata album, int totalTracks, string outputDir, string ffmpeg) {
 			string title = CleanNameForPath(t.metadata.Title ?? "").Trim().TrimEnd('.');
 			if (title.Length == 0)
 				title = "untitled";
@@ -114,6 +141,7 @@ namespace CD_Cut {
 			arglist.AddRange([
 				"-loglevel", "warning",
 				"-y",
+				"-nostdin",
 				"-ss", FormatTime(ss)
 			]);
 			if (to < TimeSpan.MaxValue)
@@ -157,10 +185,67 @@ namespace CD_Cut {
 				targetPath
 			]);
 
-			ProcessStartInfo processStartInfo = new("ffmpeg.exe", arglist);
+			ProcessStartInfo processStartInfo = new(ffmpeg, arglist);
 
-			using var process = Process.Start(processStartInfo);
-			process?.WaitForExit();
+			try {
+				using var process = Process.Start(processStartInfo);
+				if (process is null) {
+					Console.Error.WriteLine($"Track {t.index}: could not start ffmpeg.");
+					TryDelete(targetPath);
+					return false;
+				}
+				process.WaitForExit();
+				if (process.ExitCode != 0) {
+					Console.Error.WriteLine($"Track {t.index}: ffmpeg exited with code {process.ExitCode}; discarding the partial file.");
+					TryDelete(targetPath);
+					return false;
+				}
+			}
+			catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException) {
+				Console.Error.WriteLine($"Track {t.index}: failed to run ffmpeg: {ex.Message}");
+				TryDelete(targetPath);
+				return false;
+			}
+
+			return true;
+		}
+
+		private static string? FindFfmpeg() {
+			string exeName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
+
+			string local = Path.Combine(AppContext.BaseDirectory, exeName);
+			if (File.Exists(local))
+				return local;
+
+			string? path = Environment.GetEnvironmentVariable("PATH");
+			if (path is null)
+				return null;
+
+			foreach (string entry in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)) {
+				string directory = entry.Trim().Trim('"');
+				if (directory.Length == 0)
+					continue;
+				string candidate;
+				try {
+					candidate = Path.Combine(directory, exeName);
+				}
+				catch (ArgumentException) {
+					continue;
+				}
+				if (File.Exists(candidate))
+					return candidate;
+			}
+
+			return null;
+		}
+
+		private static void TryDelete(string path) {
+			try {
+				if (File.Exists(path))
+					File.Delete(path);
+			}
+			catch (IOException) { }
+			catch (UnauthorizedAccessException) { }
 		}
 
 		private static string FormatTime(TimeSpan value) {
@@ -170,49 +255,27 @@ namespace CD_Cut {
 				$"{(long)rounded.TotalHours:D2}:{rounded.Minutes:D2}:{rounded.Seconds:D2}.{rounded.Milliseconds:D3}");
 		}
 
-		private static string? CheckAudioFile(string dir, string filepath, string cuename) {
-			string res;
+		private static readonly string[] AudioExtensions = [".flac", ".wav", ".wave", ".ape", ".mp3", ".aiff", ".aif"];
 
-			res = Path.Combine(dir, filepath);
-			if (File.Exists(res))
-				return res;
+		private static string? CheckAudioFile(string dir, string filepath, string cuename, bool allowCueNameFallback) {
+			string direct = Path.Combine(dir, filepath);
+			if (File.Exists(direct))
+				return direct;
 
-			filepath = Path.GetFileNameWithoutExtension(filepath);
+			string? found = FindWithExtensions(dir, Path.GetDirectoryName(filepath), Path.GetFileNameWithoutExtension(filepath));
+			if (found is not null)
+				return found;
 
-			res = Path.Combine(dir, filepath + ".flac");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".wav");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".ape");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".mp3");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".aiff");
-			if (File.Exists(res))
-				return res;
+			return allowCueNameFallback ? FindWithExtensions(dir, null, cuename) : null;
+		}
 
-			filepath = cuename;
-
-			res = Path.Combine(dir, filepath + ".flac");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".wav");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".ape");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".mp3");
-			if (File.Exists(res))
-				return res;
-			res = Path.Combine(dir, filepath + ".aiff");
-			if (File.Exists(res))
-				return res;
-
+		private static string? FindWithExtensions(string dir, string? subdir, string stem) {
+			string searchDir = string.IsNullOrEmpty(subdir) ? dir : Path.Combine(dir, subdir);
+			foreach (string extension in AudioExtensions) {
+				string candidate = Path.Combine(searchDir, stem + extension);
+				if (File.Exists(candidate))
+					return candidate;
+			}
 			return null;
 		}
 
