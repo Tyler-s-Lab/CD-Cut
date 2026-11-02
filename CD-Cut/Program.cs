@@ -213,6 +213,11 @@ namespace CD_Cut {
 					TryDelete(targetPath);
 					return false;
 				}
+				if (!File.Exists(targetPath) || new FileInfo(targetPath).Length == 0) {
+					Console.Error.WriteLine($"Track {t.index}: ffmpeg produced no audio; discarding the empty file.");
+					TryDelete(targetPath);
+					return false;
+				}
 			}
 			catch (Exception ex) when (ex is Win32Exception or IOException or InvalidOperationException) {
 				Console.Error.WriteLine($"Track {t.index}: failed to run ffmpeg: {ex.Message}");
@@ -262,10 +267,13 @@ namespace CD_Cut {
 		}
 
 		private static string FormatTime(TimeSpan value) {
-			long totalMilliseconds = (long)Math.Round(value.TotalMilliseconds, MidpointRounding.AwayFromZero);
-			TimeSpan rounded = TimeSpan.FromMilliseconds(totalMilliseconds);
+			long totalSeconds = value.Ticks / TimeSpan.TicksPerSecond;
+			long microseconds = value.Ticks % TimeSpan.TicksPerSecond / 10;
+			long hours = totalSeconds / 3600;
+			long minutes = totalSeconds / 60 % 60;
+			long seconds = totalSeconds % 60;
 			return string.Create(CultureInfo.InvariantCulture,
-				$"{(long)rounded.TotalHours:D2}:{rounded.Minutes:D2}:{rounded.Seconds:D2}.{rounded.Milliseconds:D3}");
+				$"{hours:D2}:{minutes:D2}:{seconds:D2}.{microseconds:D6}");
 		}
 
 		private static readonly string[] AudioExtensions = [".flac", ".wav", ".wave", ".ape", ".mp3", ".aiff", ".aif"];
