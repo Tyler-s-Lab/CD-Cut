@@ -91,13 +91,13 @@ namespace CD_Cut {
 				string endText = to < TimeSpan.MaxValue ? FormatTime(to) : "end of file";
 				Console.WriteLine($"{t.index}: {t.metadata.Title} ({FormatTime(ss)} - {endText})");
 
-				Cut(t, ss, to);
+				Cut(t, ss, to, cue.AlbumMetadata, n);
 			}
 
 			return 0;
 		}
 
-		public static void Cut(Track t, TimeSpan ss, TimeSpan to) {
+		public static void Cut(Track t, TimeSpan ss, TimeSpan to, Metadata album, int totalTracks) {
 			string filename;
 			filename = $"{t.index}-{t.metadata.Title}.flac";
 			filename = CleanNameForPath(filename);
@@ -117,26 +117,28 @@ namespace CD_Cut {
 					"-to", FormatTime(to)
 				]);
 			arglist.AddRange([
-				"-i", t.filepath
-			]);
-			arglist.AddRange([
-				"-metadata", $"TRACK={t.index}"
+				"-i", t.filepath,
+				// Do not inherit tags from the source image; only the tags below apply.
+				"-map_metadata", "-1",
+				"-metadata", $"TRACKNUMBER={t.index}",
+				"-metadata", $"TRACKTOTAL={totalTracks}"
 			]);
 
 			if (!string.IsNullOrEmpty(t.metadata.Title))
 				arglist.AddRange(["-metadata", $"TITLE={t.metadata.Title}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Album))
 				arglist.AddRange(["-metadata", $"ALBUM={t.metadata.Album}"]);
-			if (!string.IsNullOrEmpty(t.metadata.Songwriter))
-				arglist.AddRange(["-metadata", $"ARTIST={t.metadata.Songwriter}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Performer))
-				arglist.AddRange(["-metadata", $"ALBUM_ARTIST={t.metadata.Performer}"]);
+				arglist.AddRange(["-metadata", $"ARTIST={t.metadata.Performer}"]);
+			if (!string.IsNullOrEmpty(album.Performer))
+				arglist.AddRange(["-metadata", $"ALBUMARTIST={album.Performer}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Year))
-				arglist.AddRange(["-metadata", $"YEAR={t.metadata.Year}"]);
+				arglist.AddRange(["-metadata", $"DATE={t.metadata.Year}"]);
 			if (!string.IsNullOrEmpty(t.metadata.DiscID))
 				arglist.AddRange(["-metadata", $"DISCID={t.metadata.DiscID}"]);
-			if (!string.IsNullOrEmpty(t.metadata.Composer))
-				arglist.AddRange(["-metadata", $"COMPOSER={t.metadata.Composer}"]);
+			string? composer = !string.IsNullOrEmpty(t.metadata.Composer) ? t.metadata.Composer : t.metadata.Songwriter;
+			if (!string.IsNullOrEmpty(composer))
+				arglist.AddRange(["-metadata", $"COMPOSER={composer}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Genre))
 				arglist.AddRange(["-metadata", $"GENRE={t.metadata.Genre}"]);
 			if (!string.IsNullOrEmpty(t.metadata.Comment))
