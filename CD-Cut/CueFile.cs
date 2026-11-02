@@ -140,9 +140,12 @@ namespace CD_Cut {
 				pendingTrackIndex = tracks.Count - 1;
 				break;
 			case "INDEX":
-				if (tracks.Count > 0 && _3rd is not null) {
+				// Only the track that was just added owns the INDEX lines that
+				// follow. Data tracks are not added, so their INDEX lines must not
+				// overwrite the previous audio track.
+				if (pendingTrackIndex >= 0 && _3rd is not null) {
 					if (int.TryParse(_2nd, out var index)) {
-						var tmp = tracks[^1];
+						var tmp = tracks[pendingTrackIndex];
 						switch (index) {
 						case 0:
 							tmp.offset00 = ParseTimeSpan(_3rd);
@@ -151,7 +154,7 @@ namespace CD_Cut {
 							tmp.offset01 = ParseTimeSpan(_3rd);
 							break;
 						}
-						tracks[^1] = tmp;
+						tracks[pendingTrackIndex] = tmp;
 					}
 				}
 				break;
