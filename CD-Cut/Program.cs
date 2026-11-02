@@ -76,6 +76,19 @@ namespace CD_Cut {
 			for (int i = 0, n = cue.Tracks.Count; i < n; ++i) {
 				Track t = cue.Tracks[i];
 
+				if (t.index < 0) {
+					Console.Error.WriteLine($"Track at position {i + 1}: invalid TRACK number; skipping.");
+					++failures;
+					continue;
+				}
+				if (t.offset01 is not double start) {
+					Console.Error.WriteLine($"Track {t.index}: missing or invalid INDEX 01; skipping.");
+					++failures;
+					continue;
+				}
+				double startMs = start;
+				TimeSpan ss = TimeSpan.FromMilliseconds(start);
+
 				string? source = CheckAudioFile(dir, t.filepath, cueName, allowCueNameFallback);
 				if (string.IsNullOrEmpty(source)) {
 					Console.Error.WriteLine($"Track {t.index}: audio file '{t.filepath}' was not found; skipping.");
@@ -83,12 +96,7 @@ namespace CD_Cut {
 					continue;
 				}
 
-				TimeSpan ss = TimeSpan.Zero, to = TimeSpan.MaxValue;
-				double startMs = 0;
-				if (t.offset01 is double start) {
-					startMs = start;
-					ss = TimeSpan.FromMilliseconds(start);
-				}
+				TimeSpan to = TimeSpan.MaxValue;
 
 				// INDEX times restart at zero for every FILE block, so the next
 				// track only delimits this one when both belong to the same file.
@@ -104,6 +112,11 @@ namespace CD_Cut {
 							continue;
 						}
 						to = TimeSpan.FromMilliseconds(end);
+					}
+					else {
+						Console.Error.WriteLine($"Track {t.index}: next track has no usable INDEX time; skipping.");
+						++failures;
+						continue;
 					}
 				}
 

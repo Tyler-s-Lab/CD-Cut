@@ -1,8 +1,8 @@
-using System.Runtime.InteropServices;
+using System.Globalization;
 using UtfUnknown;
 
 namespace CD_Cut {
-	public partial class CueFile {
+	public class CueFile {
 
 		Metadata albumMetadata;
 		bool albumCaptured;
@@ -23,7 +23,6 @@ namespace CD_Cut {
 			using var memoryStream = new MemoryStream();
 			using (var fileStream = File.OpenRead(filepath)) {
 				fileStream.CopyTo(memoryStream);
-				fileStream.Close();
 			}
 			memoryStream.Position = 0;
 			var encoding = CharsetDetector.DetectFromStream(memoryStream).Detected?.Encoding;
@@ -35,13 +34,20 @@ namespace CD_Cut {
 
 			string? cur_file = null;
 			Metadata cur_metadata = new();
+			int lineNumber = 0;
 
 			while (true) {
 				var line = reader.ReadLine();
 				if (line == null)
 					break;
-				var cmds = CommandLineToArgs(line);
-				ParseLine(cmds, ref cur_file, ref cur_metadata);
+				++lineNumber;
+				try {
+					var cmds = Tokenize(line);
+					ParseLine(cmds, ref cur_file, ref cur_metadata);
+				}
+				catch (FormatException ex) {
+					Console.Error.WriteLine($"Cue line {lineNumber}: {ex.Message}");
+				}
 			}
 
 			CommitPendingTrack(cur_metadata);
@@ -57,7 +63,7 @@ namespace CD_Cut {
 		}
 
 		void ParseLine(IEnumerable<string> cmds, ref string? cur_file, ref Metadata cur_metadata) {
-			var it = cmds.GetEnumerator();
+			using var it = cmds.GetEnumerator();
 
 			string? _1st = null, _2nd = null, _3rd = null;
 			if (it.MoveNext())
@@ -67,11 +73,11 @@ namespace CD_Cut {
 			if (it.MoveNext())
 				_3rd = it.Current;
 
-			switch (_1st?.ToUpper()) {
+			switch (_1st?.ToUpperInvariant()) {
 			case null:
 				break;
 			case "REM":
-				switch (_2nd?.ToUpper()) {
+				switch (_2nd?.ToUpperInvariant()) {
 				case "DATE":
 					cur_metadata.Year = _3rd;
 					break;
@@ -157,29 +163,47 @@ namespace CD_Cut {
 		static double ParseTimeSpan(string str) {
 			var nums = str.Split(':');
 			if (nums.Length != 3)
-				throw new ArgumentException($"Time component count: {nums.Length}: {nums}");
-			return (int.Parse(nums[0]) * 60.0 + int.Parse(nums[1]) + int.Parse(nums[2]) / 75.0) * 1000.0;
+				throw new FormatException($"Invalid INDEX time '{str}': expected MM:SS:FF.");
+
+			int minutes = ParseComponent(nums[0], str);
+			int seconds = ParseComponent(nums[1], str);
+			int frames = ParseComponent(nums[2], str);
+			if (seconds >= 60 || frames >= 75)
+				throw new FormatException($"Invalid INDEX time '{str}': seconds must be below 60 and frames below 75.");
+
+			return (minutes * 60.0 + seconds + frames / 75.0) * 1000.0;
 		}
 
-		static IEnumerable<string> CommandLineToArgs(string commandLine) {
-			var argv = CommandLineToArgvW(commandLine, out int argc);
-			if (argv == IntPtr.Zero)
-				throw new System.ComponentModel.Win32Exception();
-			try {
-				var args = new string[argc];
-				for (int i = 0; i < args.Length; i++) {
-					var p = Marshal.ReadIntPtr(argv, i * IntPtr.Size);
-					args[i] = Marshal.PtrToStringUni(p) ?? "";
+		static int ParseComponent(string text, string source) {
+			if (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out int value))
+				throw new FormatException($"Invalid INDEX time '{source}'.");
+			return value;
+		}
+
+		static IEnumerable<string> Tokenize(string line) {
+			int i = 0;
+			while (i < line.Length) {
+				while (i < line.Length && char.IsWhiteSpace(line[i]))
+					++i;
+				if (i >= line.Length)
+					yield break;
+
+				if (line[i] == '"') {
+					int start = ++i;
+					while (i < line.Length && line[i] != '"')
+						++i;
+					yield return line[start..i];
+					if (i < line.Length)
+						++i;
 				}
-				return args.Where(x => !string.IsNullOrEmpty(x));
-			}
-			finally {
-				Marshal.FreeHGlobal(argv);
+				else {
+					int start = i;
+					while (i < line.Length && !char.IsWhiteSpace(line[i]))
+						++i;
+					yield return line[start..i];
+				}
 			}
 		}
-
-		[LibraryImport("shell32.dll", SetLastError = true)]
-		private static partial IntPtr CommandLineToArgvW([MarshalAs(UnmanagedType.LPWStr)] string lpCmdLine, out int pNumArgs);
 
 	}
 }
