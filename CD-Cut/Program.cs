@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
+using System.Globalization;
 
 namespace CD_Cut {
 
@@ -63,7 +64,8 @@ namespace CD_Cut {
 					Console.WriteLine($"From file: {t.filepath} .");
 					cur_source = t.filepath;
 				}
-				Console.WriteLine($"{t.index}: {t.metadata.Title} ({ss.Hours}:{ss.Minutes}:{ss.Seconds}.{ss.Milliseconds} - {ss.Hours}:{ss.Minutes}:{ss.Seconds}.{ss.Milliseconds})");
+				string endText = to < TimeSpan.MaxValue ? FormatTime(to) : "end of file";
+				Console.WriteLine($"{t.index}: {t.metadata.Title} ({FormatTime(ss)} - {endText})");
 
 				Cut(t, ss, to);
 			}
@@ -80,11 +82,11 @@ namespace CD_Cut {
 				"-loglevel", "warning",
 				"-y",
 				"-i", t.filepath,
-				"-ss", $"{ss.Hours}:{ss.Minutes}:{ss.Seconds}.{ss.Milliseconds}"
+				"-ss", FormatTime(ss)
 			]);
 			if (to < TimeSpan.MaxValue)
 				arglist.AddRange([
-					"-to", $"{to.Hours}:{to.Minutes}:{to.Seconds}.{to.Milliseconds}"
+					"-to", FormatTime(to)
 				]);
 			arglist.AddRange([
 				"-metadata", $"TRACK={t.index}"
@@ -122,6 +124,13 @@ namespace CD_Cut {
 
 			using var process = Process.Start(processStartInfo);
 			process?.WaitForExit();
+		}
+
+		private static string FormatTime(TimeSpan value) {
+			long totalMilliseconds = (long)Math.Round(value.TotalMilliseconds, MidpointRounding.AwayFromZero);
+			TimeSpan rounded = TimeSpan.FromMilliseconds(totalMilliseconds);
+			return string.Create(CultureInfo.InvariantCulture,
+				$"{(long)rounded.TotalHours:D2}:{rounded.Minutes:D2}:{rounded.Seconds:D2}.{rounded.Milliseconds:D3}");
 		}
 
 		private static string? CheckAudioFile(string dir, string filepath, string cuename) {
