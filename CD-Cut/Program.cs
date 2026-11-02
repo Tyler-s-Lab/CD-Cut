@@ -4,34 +4,44 @@ using System.Globalization;
 namespace CD_Cut {
 
 	internal class Program {
-		static void Main(string[] args) {
-			Console.WriteLine("Hello, World!");
-
+		static int Main(string[] args) {
 			string? cuePath = null;
+
 			if (args.Length == 0) {
 				Console.WriteLine("Path to the .cue file:");
 				var s = Console.ReadLine();
-				if (s != null) {
+				if (!string.IsNullOrWhiteSpace(s))
 					cuePath = s;
-				}
 			}
-			else if (File.Exists(args[0])) {
-				cuePath = args[0];
+			else {
+				// Explorer passes a quoted path when a file is dragged onto the exe.
+				cuePath = args[0].Trim('"');
 			}
-			if (cuePath == null) {
-				Console.WriteLine("You can also drag the .cue file into this app.");
-				Console.WriteLine("Press any key to continue . . .");
-				Console.ReadKey();
-				return;
-			}
-			cuePath = cuePath.Trim('"');
-			ProcessOnCue(cuePath);
 
+			cuePath = cuePath?.Trim().Trim('"');
+
+			if (string.IsNullOrEmpty(cuePath) || !File.Exists(cuePath)) {
+				if (!string.IsNullOrEmpty(cuePath))
+					Console.Error.WriteLine($"Cue file not found: {cuePath}");
+				Console.WriteLine("You can also drag the .cue file into this app.");
+				Pause();
+				return 1;
+			}
+
+			int failures = ProcessOnCue(cuePath);
+			Pause();
+			return failures == 0 ? 0 : 1;
+		}
+
+		private static void Pause() {
+			if (Console.IsInputRedirected)
+				return;
 			Console.WriteLine("Press any key to continue . . .");
 			Console.ReadKey();
 		}
 
-		private static void ProcessOnCue(string cuePath) {
+		private static int ProcessOnCue(string cuePath) {
+			cuePath = Path.GetFullPath(cuePath);
 			CueFile cue = new();
 			cue.ReadFromFile(cuePath);
 
@@ -69,6 +79,8 @@ namespace CD_Cut {
 
 				Cut(t, ss, to);
 			}
+
+			return 0;
 		}
 
 		public static void Cut(Track t, TimeSpan ss, TimeSpan to) {
